@@ -19,9 +19,9 @@ char g_crash_file_path[256] = {0};  // 保存文件路径
 
 // 写入崩溃信息到文件
 void write_crash_info(const char* error_msg) {
-    FILE* file = fopen(g_crash_file_path, "w");
+    FILE* file = fopen(g_crash_file_path, "a");  // 使用追加模式
     if (file != nullptr) {
-        fprintf(file, "%s\n", error_msg);
+        fprintf(file, "%s", error_msg);
         fclose(file);
     } else {
         LOG_ERROR("Failed to open crash file: %s", g_crash_file_path);
@@ -81,7 +81,6 @@ static struct sigaction old_sigsegv_action;
 static struct sigaction old_sigbus_action;
 static struct sigaction old_sigill_action;
 static struct sigaction old_sigfpe_action;
-static struct sigaction old_sigtrap_action;
 static struct sigaction old_sigabrt_action;
 
 
@@ -91,18 +90,22 @@ void signal_handler(int signal_, siginfo_t* info, void* context) {
     const char* signal_name = "Unknown";
     switch (signal_) {
         case SIGSEGV: signal_name = "SIGSEGV"; break;
-        case SIGTRAP: signal_name = "SIGTRAP"; break;
         case SIGABRT: signal_name = "SIGABRT"; break;
     }
 
-    char error_msg[2048];
-    snprintf(error_msg, sizeof(error_msg), "Signal: %s, Fault Address: %p", signal_name, info->si_addr);
-    LOG_ERROR("Native Crash Detected: %s", error_msg);
-    // 获取并写入堆栈信息
-    // 拼接堆栈信息到 error_msg
-    write_stack_trace_to_string(error_msg + strlen(error_msg), sizeof(error_msg) - strlen(error_msg));
-    // 将崩溃信息写入文件
-    write_crash_info(error_msg);
+    // 使用更大的缓冲区，并分别处理信号信息和堆栈信息
+    char signal_info[512];
+    char stack_trace[4096];
+    
+    snprintf(signal_info, sizeof(signal_info), "Signal: %s, Fault Address: %p\n", signal_name, info->si_addr);
+    LOG_ERROR("Native Crash Detected: %s", signal_info);
+    
+    // 安全地获取堆栈信息
+    write_stack_trace_to_string(stack_trace, sizeof(stack_trace));
+    
+    // 将信号信息和堆栈信息分别写入文件
+    write_crash_info(signal_info);
+    write_crash_info(stack_trace);
 
     struct sigaction* old_action = nullptr;
     switch (signal_) {
@@ -111,7 +114,6 @@ void signal_handler(int signal_, siginfo_t* info, void* context) {
         case SIGILL:  old_action = &old_sigill_action; break;
         case SIGFPE:  old_action = &old_sigfpe_action; break;
         case SIGABRT:  old_action = &old_sigabrt_action; break;
-        case SIGTRAP:  old_action = &old_sigtrap_action; break;
     }
 
     if (old_action && old_action->sa_sigaction) {
@@ -141,7 +143,6 @@ Java_com_smwl_smsdk_app_MyNativeCrashHandler_initNativeCrashHandler(JNIEnv* env,
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGSEGV, &sa, &old_sigsegv_action);
-    sigaction(SIGTRAP, &sa, &old_sigtrap_action);
     sigaction(SIGABRT, &sa, &old_sigabrt_action);
     sigaction(SIGBUS, &sa, &old_sigbus_action);
     sigaction(SIGILL, &sa, &old_sigill_action);

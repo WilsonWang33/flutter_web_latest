@@ -63,15 +63,22 @@ public class MyNativeCrashHandler {
     public static void checkAndReportCrash(Context context) {
         File crashFile = new File(context.getFilesDir(), CRASH_FILE_NAME);
         if (crashFile.exists()) {
+            StringBuilder full = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new FileReader(crashFile))) {
-                String crashInfo = reader.readLine();
-                if (crashInfo != null) {
-                    Log.e("NativeCrash", "上次崩溃信息: " + crashInfo);
-//                    reportCrashToServer(crashInfo);
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    full.append(line).append('\n');
                 }
-                crashFile.delete();
             } catch (IOException e) {
                 Log.e("NativeCrash", "读取崩溃文件失败", e);
+            }
+            String crashInfo = full.toString();
+            if (!crashInfo.isEmpty()) {
+                Log.e("NativeCrash", "上次崩溃信息:\n" + crashInfo);
+//                reportCrashToServer(crashInfo);
+            }
+            if (!crashFile.delete()) {
+                Log.w("NativeCrash", "删除崩溃文件失败: " + crashFile.getAbsolutePath());
             }
         }
     }
